@@ -206,6 +206,18 @@
                 {
                     configFile = urlConfigParams.config;
                 }
+                // use config based on user role
+                // could also be based on group membership
+                var user:PortalUser = portal.user;
+                if (user.organizationRole == 'org_admin' || user.organizationRole == 'org_publisher')
+                {
+                    // Alert.show("You are a special user", "Welcome " + user.fullname);
+                    configFile = "config-admin.xml";
+                }
+                else
+                {
+                    configFile = "config.xml";
+                }
             }
 
             private function configLoadedHandler(event:AppEvent):void
