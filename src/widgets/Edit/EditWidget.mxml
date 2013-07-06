@@ -27,7 +27,7 @@
 
     <fx:Style>
         @namespace esri "http://www.esri.com/2008/ags";
-        
+
         esri|TemplatePicker
         {
             skin-class: ClassReference("widgets.Edit.EditWidgetTemplatePickerSkin");
@@ -53,10 +53,12 @@
             import com.esri.ags.layers.supportClasses.FeatureTableDetails;
             import com.esri.ags.layers.supportClasses.Field;
             import com.esri.ags.layers.supportClasses.LayerInfo;
+            import com.esri.ags.skins.fieldClasses.CalendarField;
             import com.esri.ags.skins.supportClasses.AttachmentMouseEvent;
             import com.esri.ags.tasks.GeometryServiceSingleton;
             import com.esri.ags.tasks.JSONTask;
             import com.esri.viewer.AppEvent;
+            import com.esri.viewer.utils.MapServiceUtil;
 
             import mx.binding.utils.ChangeWatcher;
             import mx.collections.ArrayCollection;
@@ -118,7 +120,7 @@
 
             private function basewidget_widgetConfigLoaded():void
             {
-                // hide map infowindow if any               
+                // hide map infowindow if any
                 map.infoWindow.hide();
 
                 if (configXML)
@@ -207,7 +209,7 @@
 
                     if (configXML.layersettings.length() > 0)
                     {
-                        // layerSettings, overriding default settings                   
+                        // layerSettings, overriding default settings
                         configureLayerSettings(configXML.layersettings.layer);
                     }
                     else if (configXML.formfieldsorder.length() > 0)
@@ -226,7 +228,7 @@
 
                 AppEvent.dispatch(AppEvent.DATA_OPT_LAYERS, null, getOplayers);
                 mapLayers = map.layers as ArrayCollection;
-                arrLayers = getLayers(mapLayers); // get all the layers on map except basemap layers;    
+                arrLayers = getLayers(mapLayers); // get all the layers on map except basemap layers;
                 populateEditor(arrLayers);
             }
 
@@ -275,6 +277,18 @@
                             if (fieldXML.@tooltip[0])
                             {
                                 fieldObject.tooltip = fieldXML.@tooltip;
+                            }
+                            if (fieldXML.@dateformat[0])
+                            {
+                                fieldObject.dateFormat = fieldXML.@dateformat;
+                            }
+                            if (fieldXML.@useutc[0])
+                            {
+                                fieldObject.useUTC = fieldXML.@useutc == "true";
+                            }
+                            if (fieldXML.@required[0])
+                            {
+                                fieldObject.required = fieldXML.@required == "true";
                             }
                             outFields.push(fieldObject);
                         }
@@ -365,7 +379,7 @@
 
             private function getLayers(layers:ArrayCollection):Array
             {
-                // all the layers except basemaps                
+                // all the layers except basemaps
                 var result:Array = [];
                 var includeLayer:Boolean;
                 var dynamicBaseMapLayers:Array = [];
@@ -470,7 +484,7 @@
                         editor.map = map;
                         updateSelectionColor(featureLayers);
                         editor.featureLayers = featureLayers;
-                        // infowindowLabel on the AttributeInspetor
+                        // infowindowLabel on the AttributeInspector
                         editor.attributeInspector.infoWindowLabel = attributesLabel;
                     }
                     else
@@ -538,13 +552,14 @@
                             arcGISDynamicMapServiceLayer.addEventListener(FlexEvent.HIDE, layer_hideShowHandler);
                             arcGISDynamicMapServiceLayer.addEventListener(FlexEvent.SHOW, layer_hideShowHandler);
 
-                            if (arcGISDynamicMapServiceLayer.visibleLayers)
-                            {
-                                arcGISDynamicMapServiceLayer.visibleLayers.removeEventListener(CollectionEvent.COLLECTION_CHANGE, visibleLayersChangeHandler);
-                                arcGISDynamicMapServiceLayer.visibleLayers.addEventListener(CollectionEvent.COLLECTION_CHANGE, visibleLayersChangeHandler);
-                            }
-                            visibleLayersChangeWatcher = ChangeWatcher.watch(arcGISDynamicMapServiceLayer, "visibleLayers", visibleLayersChange);
                             var copyLayerInfos:Array = arcGISDynamicMapServiceLayer.layerInfos;
+                            if (!arcGISDynamicMapServiceLayer.visibleLayers)
+                            {
+                                var visLayers:Array = getActualVisibleLayers(MapServiceUtil.getVisibleSubLayers(copyLayerInfos), copyLayerInfos);
+                                arcGISDynamicMapServiceLayer.visibleLayers = new ArrayCollection(visLayers);
+                            }
+                            arcGISDynamicMapServiceLayer.visibleLayers.addEventListener(CollectionEvent.COLLECTION_CHANGE, visibleLayersChangeHandler);
+                            visibleLayersChangeWatcher = ChangeWatcher.watch(arcGISDynamicMapServiceLayer, "visibleLayers", visibleLayersChange);
                             for each (var copyLayerInfo:LayerInfo in copyLayerInfos)
                             {
                                 updateMinMaxScaleOnLayerInfos(copyLayerInfo, copyLayerInfos);
@@ -756,7 +771,7 @@
                         event.layer.removeEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete);
                         event.layer.addEventListener(FeatureLayerEvent.SELECTION_COMPLETE, featureLayer_selectionComplete, false, 1);
 
-                        //store the renderer info for each layer on map                        
+                        //store the renderer info for each layer on map
                         storeInfoWindowRenderer();
 
                         arrFinalLayers.unshift(event.layer);
@@ -1185,7 +1200,6 @@
                     if (dynamicMapServiceLayer.visibleLayers && dynamicMapServiceLayer.visibleLayers.getItemIndex(featureLayerId) != -1)
                     {
                         dynamicMapServiceLayer.visibleLayers.removeItemAt(dynamicMapServiceLayer.visibleLayers.getItemIndex(featureLayerId));
-
                     }
                 }
             }
@@ -1256,6 +1270,10 @@
                 if (attachmentInspector)
                 {
                     attachmentInspector.clear();
+                }
+                if (relationshipInspector)
+                {
+                    relationshipInspector.clear();
                 }
             }
 
@@ -1333,7 +1351,25 @@
                             fieldInspector.fieldName = fieldObject.name;
                             fieldInspector.label = fieldObject.alias;
                             fieldInspector.toolTip = fieldObject.tooltip;
-
+                            if (isDateField(fieldObject.name, featureLayer) &&
+                                (fieldObject.dateFormat != null || fieldObject.useUTC != null))
+                            {
+                                var calendarFieldFactory:ClassFactory = new ClassFactory(CalendarField);
+                                calendarFieldFactory.properties = {};
+                                if (fieldObject.dateFormat != null)
+                                {
+                                    calendarFieldFactory.properties.dateFormat = fieldObject.dateFormat;
+                                }
+                                if (fieldObject.useUTC != null)
+                                {
+                                    calendarFieldFactory.properties.useUTC = fieldObject.useUTC;
+                                }
+                                fieldInspector.editor = calendarFieldFactory;
+                            }
+                            if (fieldObject.required != null)
+                            {
+                                fieldInspector.required = fieldObject.required;
+                            }
                             attributeInspectorFieldInspectors.push(fieldInspector);
                         }
                         for each (var field:Field in featureLayer.layerDetails.fields)
@@ -1375,6 +1411,26 @@
                         editor.attributeInspector.showGlobalID = showGlobalID == "true";
                     }
                 }
+            }
+
+            private function isDateField(fieldName:String, featureLayer:FeatureLayer):Boolean
+            {
+                var result:Boolean;
+
+                var fields:Array = featureLayer.layerDetails.fields;
+                if (fields)
+                {
+                    for each (var field:Field in fields)
+                    {
+                        if (field.name == fieldName && field.type == Field.TYPE_DATE)
+                        {
+                            result = true;
+                            break;
+                        }
+                    }
+                }
+
+                return result;
             }
 
             private function updateSelectionColor(featureLayers:Array):void

@@ -25,18 +25,18 @@
                    widgetConfigLoaded="basewidget_widgetConfigLoaded()">
     <fx:Script>
         <![CDATA[
+            import com.esri.ags.SpatialReference;
             import com.esri.ags.Units;
             import com.esri.ags.components.supportClasses.DirectionsGeocoderOptions;
             import com.esri.ags.components.supportClasses.DirectionsRouteOptions;
             import com.esri.ags.components.supportClasses.GeocoderLocatorOptions;
             import com.esri.ags.components.supportClasses.GeocoderMapService;
+            import com.esri.ags.geometry.Extent;
             import com.esri.viewer.AppEvent;
+            import com.esri.viewer.components.toc.utils.MapUtil;
 
             import mx.collections.*;
             import mx.events.FlexEvent;
-
-            [Bindable]
-            private var directionsURL:String = "http://route.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World"; // default url        
 
             protected function basewidget_initializeHandler(event:FlexEvent):void
             {
@@ -62,7 +62,7 @@
                     var url:String = configXML.url[0];
                     if (url)
                     {
-                        directionsURL = url;
+                        directions.url = url;
                     }
                     var useProxyForDirections:Boolean = configXML.useproxy[0] && configXML.useproxy == "true";
                     if (useProxyForDirections && configData.proxyUrl)
@@ -184,6 +184,19 @@
                     locatorOptions.singleLineAddressFieldName = singleLineAddressField;
                 }
 
+                var searchExtent:Extent = MapUtil.createExtent(locatorOptionsXML.searchextent.toString().split(" "));
+                if (searchExtent)
+                {
+                    var wkid:Number = parseFloat(locatorOptionsXML.searchextent.@wkid[0]);
+                    var wkt:String = locatorOptionsXML.searchextent.@wkt[0];
+                    if (!isNaN(wkid) || wkt)
+                    {
+                        searchExtent.spatialReference = new SpatialReference(wkid, wkt);
+                    }
+
+                    locatorOptions.searchExtent = searchExtent;
+                }
+
                 return locatorOptions;
             }
 
@@ -278,7 +291,6 @@
         <esri:Directions id="directions"
                          width="100%" height="100%"
                          directionsComplete="{map.infoWindow.hide()}"
-                         map="{map}"
-                         url="{directionsURL}"/>
+                         map="{map}"/>
     </viewer:WidgetTemplate>
 </viewer:BaseWidget>
